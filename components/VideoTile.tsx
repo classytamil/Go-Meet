@@ -6,6 +6,7 @@ import { Participant } from '../types';
 interface VideoTileProps {
   participant: Participant;
   stream?: MediaStream | null;
+  videoTrack?: MediaStreamTrack | null; // <--- ADDED
   isActiveSpeaker: boolean;
   isLocalHost?: boolean;
   volume?: number; // 0 to 1
@@ -16,7 +17,7 @@ interface VideoTileProps {
 }
 
 const VideoTile: React.FC<VideoTileProps> = ({
-  participant, stream, isActiveSpeaker, isLocalHost, volume = 0,
+  participant, stream, videoTrack, isActiveSpeaker, isLocalHost, volume = 0,
   onMuteParticipant, onRemoveParticipant, onToggleLocalMute, onToggleLocalVideo
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,11 +25,18 @@ const VideoTile: React.FC<VideoTileProps> = ({
   const [hasStartedSpeaking, setHasStartedSpeaking] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
 
+  // Derive stable stream
+  const mediaStream = React.useMemo(() => {
+    if (stream) return stream;
+    if (videoTrack) return new MediaStream([videoTrack]);
+    return null;
+  }, [stream, videoTrack]);
+
   useEffect(() => {
-    if (videoRef.current && stream && participant.videoEnabled) {
-      videoRef.current.srcObject = stream;
+    if (videoRef.current && mediaStream && participant.videoEnabled) {
+      videoRef.current.srcObject = mediaStream;
     }
-  }, [stream, participant.videoEnabled]);
+  }, [mediaStream, participant.videoEnabled]);
 
   useEffect(() => {
     if (isActiveSpeaker) {

@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Participant as LKParticipant } from 'livekit-client';
 import { Participant } from '../types';
 
 interface VideoTileProps {
   participant: Participant;
+  livekitParticipant?: LKParticipant;
   stream?: MediaStream | null;
-  videoTrack?: MediaStreamTrack | null; // <--- ADDED
+  videoTrack?: MediaStreamTrack | null;
   isActiveSpeaker: boolean;
   isLocalHost?: boolean;
   volume?: number; // 0 to 1
@@ -17,7 +19,7 @@ interface VideoTileProps {
 }
 
 const VideoTile: React.FC<VideoTileProps> = ({
-  participant, stream, videoTrack, isActiveSpeaker, isLocalHost, volume = 0,
+  participant, livekitParticipant, stream, videoTrack, isActiveSpeaker, isLocalHost, volume = 0,
   onMuteParticipant, onRemoveParticipant, onToggleLocalMute, onToggleLocalVideo
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -46,7 +48,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
     }
   }, [isActiveSpeaker]);
 
-  const scaleEffect = isActiveSpeaker ? 1 + volume * 0.012 : 1;
+  const scaleEffect = isActiveSpeaker ? 1.05 : 1;
 
   // Accessibility helpers
   const handleToggleMute = () => {
@@ -67,16 +69,16 @@ const VideoTile: React.FC<VideoTileProps> = ({
 
   return (
     <div
-      className={`group video-tile-container transition-all duration-300 ease-out ${isActiveSpeaker ? 'z-10' : 'z-0'}`}
+      className={`group video-tile-container transition-transform duration-100 ease-out ${isActiveSpeaker ? 'z-10' : 'z-0'}`}
       style={{ transform: `scale(${scaleEffect})` }}
     >
       <div
         className={`relative rounded-xl md:rounded-2xl overflow-hidden bg-[#1a1c1e] border-2 transition-all duration-300 w-full h-full shadow-lg flex items-center justify-center ${hasStartedSpeaking ? 'animate-speaker-pop' : ''
           } ${isPinned ? 'ring-4 ring-blue-500/50' : ''
           } ${isSharingScreen
-            ? 'border-cyan-500 shadow-[0_0_20px_rgba(34,211,238,0.2)]'
+            ? 'border-[3px] border-cyan-500 shadow-[0_0_30px_rgba(34,211,238,0.4)] ring-1 ring-cyan-400'
             : isActiveSpeaker
-              ? 'border-blue-500'
+              ? 'border-blue-500' // Base border, glow added below
               : 'border-gray-800/50 hover:border-white/10'
           }`}
       >
@@ -146,7 +148,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
 
         {/* Video or Avatar */}
         <div className="w-full h-full relative z-10 flex items-center justify-center overflow-hidden">
-          {participant.videoEnabled && (stream || isScreenShare) ? (
+          {participant.videoEnabled && mediaStream ? (
             <video
               ref={videoRef}
               autoPlay

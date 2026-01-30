@@ -20,6 +20,20 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
     }
 
+    // Validate meeting exists in DB
+    try {
+        const { sql } = await import('@/lib/db');
+        const result = await sql.query('SELECT id FROM meetings WHERE meeting_code = $1', [room]);
+        if (result.rowCount === 0) {
+            return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+        }
+    } catch (e) {
+        console.error("Error validating meeting:", e);
+        // Fallback: In case DB is down, we might want to fail or allow.
+        // For strict "must be saved on db", we fail.
+        return NextResponse.json({ error: 'Database error validating meeting' }, { status: 500 });
+    }
+
     const at = new AccessToken(apiKey, apiSecret, { identity: username });
     at.addGrant({ roomJoin: true, room: room, canPublish: true, canSubscribe: true });
 

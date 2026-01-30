@@ -51,13 +51,32 @@ export default function MeetingPage() {
     }
   };
 
-  const handleCreateMeeting = () => {
+  const handleCreateMeeting = async () => {
+    setMediaError(null);
     const code = Math.random().toString(36).substring(2, 5) + '-' +
       Math.random().toString(36).substring(2, 6) + '-' +
       Math.random().toString(36).substring(2, 5);
-    setMeetingCode(code);
-    setStatus(MeetingStatus.LOBBY);
-    initMedia(true);
+
+    try {
+      // Create meeting in DB
+      const res = await fetch('/api/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingCode: code, roomId: code })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create meeting');
+      }
+
+      setMeetingCode(code);
+      setStatus(MeetingStatus.LOBBY);
+      initMedia(true);
+    } catch (e: any) {
+      console.error("Creation error:", e);
+      setMediaError(e.message || "Could not create meeting service");
+    }
   };
 
   const handleJoinByCode = (codeToJoin?: string) => {
@@ -100,13 +119,18 @@ export default function MeetingPage() {
     try {
       const resp = await fetch(`/api/token?room=${meetingCode}&username=${username}`);
       const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data.error || "Failed to join meeting");
+      }
+
       if (data.token) {
         setToken(data.token);
         setStatus(MeetingStatus.JOINED);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to get token", e);
-      setMediaError("Failed to connect to server");
+      setMediaError(e.message || "Failed to connect to server");
     }
   };
 

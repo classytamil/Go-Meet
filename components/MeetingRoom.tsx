@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { LiveKitRoom, useRoomContext, useTracks, useParticipants, useLocalParticipant } from '@livekit/components-react';
-import { RoomEvent, Track } from 'livekit-client';
+import { RoomEvent, Track, ConnectionQuality } from 'livekit-client';
 import '@livekit/components-styles';
 import { Participant, Message } from '../types';
 import VideoTile from './VideoTile';
@@ -60,6 +60,18 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     const [showSecurityModal, setShowSecurityModal] = useState(false);
     const [meetingDuration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent);
+
+    // Network Quality Listener
+    useEffect(() => {
+        const handleQuality = (quality: ConnectionQuality, participant: any) => {
+            if (participant === room.localParticipant) {
+                setConnectionQuality(quality);
+            }
+        };
+        room.on(RoomEvent.ConnectionQualityChanged, handleQuality);
+        return () => { room.off(RoomEvent.ConnectionQualityChanged, handleQuality); };
+    }, [room]);
 
     // Initial DB Call & Timer
     React.useEffect(() => {
@@ -103,6 +115,16 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
             const str = new TextDecoder().decode(payload);
             try {
                 const msg = JSON.parse(str);
+
+                if (msg.type === 'reaction') {
+                    const reactionId = Date.now().toString() + Math.random();
+                    setReactions(prev => [...prev, { id: reactionId, emoji: msg.emoji, senderId: msg.senderId }]);
+                    setTimeout(() => {
+                        setReactions(prev => prev.filter(r => r.id !== reactionId));
+                    }, 4000);
+                    return;
+                }
+
                 // The received msg.text is already encrypted.
                 // We construct a Message object.
                 const newMessage: Message = {
@@ -186,8 +208,12 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     const handleToggleMute = () => localParticipant.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled);
     const handleToggleVideo = () => localParticipant.setCameraEnabled(!localParticipant.isCameraEnabled);
     const handleToggleScreenShare = async () => {
-        const enable = !localParticipant.isScreenShareEnabled;
-        await localParticipant.setScreenShareEnabled(enable, { audio: true });
+        const newState = !localParticipant.isScreenShareEnabled;
+        if (newState) {
+            await localParticipant.setScreenShareEnabled(true, { audio: true });
+        } else {
+            await localParticipant.setScreenShareEnabled(false);
+        }
     };
     const handleEndCall = () => { room.disconnect(); };
 
@@ -287,7 +313,7 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
 
         if (screenTrack) {
             // Fake participant for value
-            const fakeP = { ...screenShareParticipant, id: 'screen-share', name: `${screenShareParticipant.name}'s Screen` };
+            const fakeP = { ...screenShareParticipant, id: 'screen-share', name: `${screenShareParticipant.name}'s Screen`, videoEnabled: true };
             mainTile = (
                 <VideoTile
                     participant={fakeP}
@@ -300,15 +326,67 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     }
 
 
+    const [reactions, setReactions] = useState<{ id: string; emoji: string; senderId: string }[]>([]);
+
+    const handleReaction = (emoji: string) => {
+        const reactionId = Date.now().toString();
+        const reaction = { id: reactionId, emoji, senderId: localParticipant.identity };
+
+        setReactions(prev => [...prev, reaction]);
+
+        // Remove after animation
+        setTimeout(() => {
+            setReactions(prev => prev.filter(r => r.id !== reactionId));
+        }, 4000);
+
+        const payload = new TextEncoder().encode(JSON.stringify({
+            type: 'reaction',
+            emoji,
+            senderId: localParticipant.identity
+        }));
+        room.localParticipant.publishData(payload, { reliable: true });
+    };
+
+    // ... (existing helper methods)
+
+    // Render Reaction Overlay
+    const renderReactions = () => (
+        <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+            {reactions.map(r => (
+                <div
+                    key={r.id}
+                    className="absolute bottom-20 left-1/2 text-6xl animate-float-up"
+                    style={{
+                        left: `${50 + (Math.random() * 40 - 20)}%`, // Randomize horizontal start slightly
+                        animationDuration: `${3 + Math.random()}s`
+                    }}
+                >
+                    {r.emoji}
+                </div>
+            ))}
+        </div>
+    );
+
     return (
         <div className="flex-1 flex flex-col h-full bg-[#0f1115] text-white overflow-hidden relative">
+            {renderReactions()}
+
             {/* Header */}
             <header className="h-16 px-6 flex items-center justify-between border-b border-gray-800/50 backdrop-blur-md sticky top-0 z-40">
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 px-2.5 py-1 bg-white/5 rounded-full border border-white/5">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-green-500/50" />
-                        <span className="text-[9px] font-black uppercase text-gray-400">Live</span>
+
+
+                    {/* Network Indicator */}
+                    <div className="flex items-center gap-2 px-2.5 py-1 bg-white/5 rounded-full border border-white/5" title="Connection Quality">
+                        <div className={`w-2 h-2 rounded-full ${connectionQuality === ConnectionQuality.Excellent || connectionQuality === ConnectionQuality.Good
+                            ? 'bg-green-500'
+                            : connectionQuality === ConnectionQuality.Poor
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                            }`} />
+                        <i className="fas fa-wifi text-[10px] text-gray-400"></i>
                     </div>
+
                     <div className="h-4 w-[1px] bg-gray-800"></div>
                     <span className="text-sm font-black text-gray-500">{currentTime.toLocaleTimeString([], { timeStyle: 'short' })}</span>
                 </div>
@@ -332,7 +410,7 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
             <main className="flex-1 relative flex overflow-hidden">
                 <div className={`flex-1 min-h-0 transition-all duration-300 ${isSidebarOpen ? 'mr-[400px]' : ''}`}>
                     <div className="absolute inset-0 overflow-y-auto custom-scrollbar px-2 py-4 pb-32">
-                        <div className="min-h-full w-full flex items-start justify-center">
+                        <div className="min-h-full w-full flex items-center justify-center">
                             <div className={`video-grid ${getGridClass()}`}>
                                 {isPresentation && mainTile ? (
                                     <>
@@ -382,6 +460,7 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 onToggleVideo={handleToggleVideo}
                 onToggleScreenShare={handleToggleScreenShare}
                 onToggleHandRaised={handleToggleHandRaised}
+                onReaction={handleReaction}
                 onToggleSidebar={() => handleToggleSidebar('chat')}
                 onEndCall={() => setShowExitConfirm(true)}
                 onAddParticipant={() => { }} // Invite only

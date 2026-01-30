@@ -19,6 +19,7 @@ interface SidebarProps {
   onMuteParticipant?: (id: string) => void;
   onAdmitParticipant?: (id: string) => void;
   onDenyParticipant?: (id: string) => void;
+  unreadCount?: number;
 }
 
 const ChatMessage: React.FC<{ msg: Message; secret: string }> = ({ msg, secret }) => {
@@ -39,8 +40,8 @@ const ChatMessage: React.FC<{ msg: Message; secret: string }> = ({ msg, secret }
         </span>
       </div>
       <div className={`p-3 rounded-2xl max-w-[95%] text-sm leading-relaxed border ${msg.sender === 'You'
-          ? 'bg-blue-600/10 border-blue-500/20 text-blue-50 rounded-tl-none'
-          : 'bg-white/5 border-white/5 text-gray-200 rounded-tl-none'
+        ? 'bg-blue-600/10 border-blue-500/20 text-blue-50 rounded-tl-none'
+        : 'bg-white/5 border-white/5 text-gray-200 rounded-tl-none'
         }`}>
         {decrypted}
       </div>
@@ -50,7 +51,7 @@ const ChatMessage: React.FC<{ msg: Message; secret: string }> = ({ msg, secret }
 
 const Sidebar: React.FC<SidebarProps> = ({
   messages, participants, pendingRequests = [], isOpen, isHost, activeTab, meetingCode,
-  onTabChange, onClose, onSendMessage, onInviteClick, onRemoveParticipant, onMuteParticipant, onAdmitParticipant, onDenyParticipant
+  onTabChange, onClose, onSendMessage, onInviteClick, onRemoveParticipant, onMuteParticipant, onAdmitParticipant, onDenyParticipant, unreadCount = 0
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
@@ -120,7 +121,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="flex border-b border-gray-800 bg-[#1a1c1e]">
-        <button onClick={() => onTabChange('chat')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${activeTab === 'chat' ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>Chat</button>
+        <button onClick={() => onTabChange('chat')} className={`relative flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${activeTab === 'chat' ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
+          Chat
+          {unreadCount > 0 && activeTab !== 'chat' && (
+            <span className="absolute top-3 right-[30%] w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+          )}
+        </button>
         <button onClick={() => onTabChange('participants')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 relative ${activeTab === 'participants' ? 'border-blue-500 text-blue-400 bg-blue-500/5' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>People ({participants.length})</button>
       </div>
 
@@ -139,16 +145,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="p-4 md:p-6 bg-[#1a1c1e] border-t border-gray-800 space-y-4 pb-safe">
-              <div className="bg-gradient-to-br from-blue-900/10 to-transparent border border-blue-500/10 rounded-2xl p-4 group">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">AI Context</span>
-                  <button onClick={handleGenerateSummary} className="text-gray-500 hover:text-blue-400 transition-colors"><i className="fas fa-magic text-[10px]"></i></button>
-                </div>
-                <div className="max-h-[60px] overflow-y-auto text-[11px] text-gray-500 leading-relaxed italic font-medium">
-                  {isSummarizing ? "Synthesizing chat history..." : (summary || "Ask AI to recap the meeting.")}
-                </div>
-              </div>
-
               <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
                 <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Send to everyone..." className="flex-1 bg-white/5 border border-gray-800 rounded-2xl px-5 py-3.5 text-sm outline-none focus:border-blue-600 focus:bg-white/10 transition-all pr-12 text-gray-100" />
                 <button type="submit" disabled={!inputText.trim()} className="absolute right-2 w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white disabled:opacity-20 active:scale-90 transition-all shadow-lg shadow-blue-900/30"><i className="fas fa-paper-plane text-xs"></i></button>
@@ -164,7 +160,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search 100 participants..."
+                  placeholder="Search participants..."
                   className="w-full bg-white/5 border border-gray-800 rounded-xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-blue-500 transition-all"
                 />
               </div>

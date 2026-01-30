@@ -21,11 +21,19 @@ export async function GET(req: NextRequest) {
     }
 
     // Validate meeting exists in DB
+    let realMeetingCode = room;
     try {
         const { sql } = await import('@/lib/db');
-        const result = await sql.query('SELECT id FROM meetings WHERE meeting_code = $1', [room]);
+        const normalizedRoom = room.replace(/-/g, '');
+        // Check finding meeting by ignoring dashes
+        const result = await sql.query("SELECT id, meeting_code FROM meetings WHERE REPLACE(meeting_code, '-', '') = $1", [normalizedRoom]);
+
         if (result.rowCount === 0) {
             return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+        }
+
+        if (result.rows[0]?.meeting_code) {
+            realMeetingCode = result.rows[0].meeting_code;
         }
     } catch (e) {
         console.error("Error validating meeting:", e);
@@ -35,7 +43,7 @@ export async function GET(req: NextRequest) {
     }
 
     const at = new AccessToken(apiKey, apiSecret, { identity: username });
-    at.addGrant({ roomJoin: true, room: room, canPublish: true, canSubscribe: true });
+    at.addGrant({ roomJoin: true, room: realMeetingCode, canPublish: true, canSubscribe: true });
 
-    return NextResponse.json({ token: await at.toJwt() });
+    return NextResponse.json({ token: await at.toJwt(), room: realMeetingCode });
 }

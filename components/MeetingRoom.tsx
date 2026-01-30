@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LiveKitRoom, useRoomContext, useTracks, useParticipants, useLocalParticipant } from '@livekit/components-react';
+import { LiveKitRoom, useRoomContext, useTracks, useParticipants, useLocalParticipant, RoomAudioRenderer } from '@livekit/components-react';
 import { RoomEvent, Track, ConnectionQuality } from 'livekit-client';
 import '@livekit/components-styles';
 import { Participant, Message } from '../types';
@@ -37,6 +37,7 @@ export default function MeetingRoomWrapper({ token, serverUrl, meetingCode, user
             onDisconnected={onLeave}
         >
             <ActiveMeetingContent meetingCode={meetingCode} isHost={isHost} />
+            <RoomAudioRenderer />
         </LiveKitRoom>
     );
 }
@@ -47,8 +48,9 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     const remoteParticipants = useParticipants();
 
     // We get tracks to render video tiles
+    // We get tracks to render video tiles
     const tracks = useTracks(
-        [Track.Source.Camera, Track.Source.ScreenShare],
+        [Track.Source.Camera, Track.Source.ScreenShare, Track.Source.ScreenShareAudio],
         { onlySubscribed: true }
     );
 
@@ -61,6 +63,37 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     const [meetingDuration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>(ConnectionQuality.Excellent);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [localStatus, setLocalStatus] = useState<'active' | 'waiting'>(initialIsHost ? 'active' : 'waiting');
+
+    // On mount, if not host, update metadata to waiting
+    useEffect(() => {
+        if (!room.localParticipant) return;
+
+        const updateStatus = async () => {
+            if (initialIsHost) {
+                // Host is always active
+                await room.localParticipant.setMetadata(JSON.stringify({ status: 'active' }));
+            } else {
+                // Guest defaults to waiting, unless already admitted (re-join)
+                // For this impl, always wait on clean join.
+                await room.localParticipant.setMetadata(JSON.stringify({ status: 'waiting' }));
+            }
+        };
+        updateStatus();
+    }, [room, initialIsHost]);
+
+    // Refs for accessing state inside event listeners
+    const isSidebarOpenRef = React.useRef(isSidebarOpen);
+    const sidebarTabRef = React.useRef(sidebarTab);
+
+    useEffect(() => {
+        isSidebarOpenRef.current = isSidebarOpen;
+        sidebarTabRef.current = sidebarTab;
+        if (isSidebarOpen && sidebarTab === 'chat') {
+            setUnreadCount(0);
+        }
+    }, [isSidebarOpen, sidebarTab]);
 
     // Network Quality Listener
     useEffect(() => {
@@ -69,8 +102,25 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 setConnectionQuality(quality);
             }
         };
+
+        const handleMetadata = (metadata: string | undefined, participant: any) => {
+            if (metadata && participant !== room.localParticipant) {
+                try {
+                    const data = JSON.parse(metadata);
+                    if (data.isHandRaised) {
+                        setToast(`${participant.name || 'Someone'} raised their hand`);
+                        setTimeout(() => setToast(null), 3000);
+                    }
+                } catch (e) { }
+            }
+        };
+
         room.on(RoomEvent.ConnectionQualityChanged, handleQuality);
-        return () => { room.off(RoomEvent.ConnectionQualityChanged, handleQuality); };
+        room.on(RoomEvent.ParticipantMetadataChanged, handleMetadata);
+        return () => {
+            room.off(RoomEvent.ConnectionQualityChanged, handleQuality);
+            room.off(RoomEvent.ParticipantMetadataChanged, handleMetadata);
+        };
     }, [room]);
 
     // Initial DB Call & Timer
@@ -125,6 +175,17 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     return;
                 }
 
+                if (msg.type === 'ADMIT_PARTICIPANT') {
+                    // Check if it's for me
+                    if (msg.targetId === localParticipant.identity) {
+                        setLocalStatus('active');
+                        localParticipant.setMetadata(JSON.stringify({ status: 'active' }));
+                        setToast("You have been admitted to the meeting!");
+                        setTimeout(() => setToast(null), 3000);
+                    }
+                    return;
+                }
+
                 // The received msg.text is already encrypted.
                 // We construct a Message object.
                 const newMessage: Message = {
@@ -135,6 +196,10 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     isAI: false
                 };
                 setMessages(prev => [...prev, newMessage]);
+
+                if ((!isSidebarOpenRef.current || sidebarTabRef.current !== 'chat') && msg.sender !== (localParticipant.name || 'Guest')) {
+                    setUnreadCount(prev => prev + 1);
+                }
             } catch (e) { }
         };
         room.on(RoomEvent.DataReceived, handleData);
@@ -167,7 +232,8 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 videoEnabled: localParticipant.isCameraEnabled,
                 audioEnabled: localParticipant.isMicrophoneEnabled,
                 isHandRaised: isHandRaised,
-                isSharingScreen: localParticipant.isScreenShareEnabled
+                isSharingScreen: localParticipant.isScreenShareEnabled,
+                status: 'active' // Helper: local user always sees themselves as active in their logic, visibility handled by view
             });
         }
         // Remote
@@ -181,6 +247,18 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     } catch (e) { }
                 }
 
+                // Read status from metadata
+                let status: 'active' | 'waiting' = 'active'; // Default for safety? or waiting?
+                // Actually if no metadata, assume active (retro-compatibility) OR assume waiting?
+                // Let's assume active if missing, to prevent breaking old rooms.
+                // But for THIS logic, we set 'waiting' explicitly.
+                if (p.metadata) {
+                    try {
+                        const meta = JSON.parse(p.metadata);
+                        status = meta.status || 'active';
+                    } catch (e) { }
+                }
+
                 all.push({
                     id: p.identity,
                     name: p.name || 'Guest',
@@ -190,12 +268,21 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     videoEnabled: p.isCameraEnabled,
                     audioEnabled: p.isMicrophoneEnabled,
                     isHandRaised: remoteHandRaised,
-                    isSharingScreen: p.isScreenShareEnabled
+                    isSharingScreen: p.isScreenShareEnabled,
+                    status: status
                 });
             }
         });
         return all;
-    }, [localParticipant, remoteParticipants, initialIsHost, isHandRaised]);
+    }, [localParticipant, remoteParticipants, initialIsHost, isHandRaised, localStatus]);
+
+    // Derived lists
+    // Visible: Active participants (plus myself if I am active, or even if I am waiting I see myself?)
+    // While waiting, I probably shouldn't see anyone.
+    // Host sees everyone? No, Host sees active in Grid, waiting in Sidebar.
+    const activeParticipants = participants.filter(p => p.status === 'active' || p.isMe); // I am always in my list, but visibility handled below
+    const pendingParticipants = participants.filter(p => p.status === 'waiting' && !p.isMe); // Only show OTHERS who are waiting
+
 
     // Derived state
     const isMuted = !localParticipant.isMicrophoneEnabled;
@@ -208,11 +295,16 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     const handleToggleMute = () => localParticipant.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled);
     const handleToggleVideo = () => localParticipant.setCameraEnabled(!localParticipant.isCameraEnabled);
     const handleToggleScreenShare = async () => {
-        const newState = !localParticipant.isScreenShareEnabled;
-        if (newState) {
-            await localParticipant.setScreenShareEnabled(true, { audio: true });
-        } else {
-            await localParticipant.setScreenShareEnabled(false);
+        try {
+            const newState = !localParticipant.isScreenShareEnabled;
+            if (newState) {
+                await localParticipant.setScreenShareEnabled(true, { audio: true });
+            } else {
+                await localParticipant.setScreenShareEnabled(false);
+            }
+        } catch (error) {
+            console.error("Screen share error:", error);
+            alert("Unable to share screen. Your browser might not support it, or permission was denied.");
         }
     };
     const handleEndCall = () => { room.disconnect(); };
@@ -254,9 +346,21 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
         return 'grid-many-participants';
     };
 
-    // Filter visible participants
-    // If screen share is active, prioritize screen share
-    const visibleParticipants = participants;
+    // Filter visible participants for the grid
+    const visibleParticipants = activeParticipants;
+
+    const handleAdmitParticipant = async (id: string) => {
+        // Send a data message to everyone (simplest) or specific user
+        const payload = new TextEncoder().encode(JSON.stringify({
+            type: 'ADMIT_PARTICIPANT',
+            targetId: id
+        }));
+        // Send reliably
+        await room.localParticipant.publishData(payload, { reliable: true });
+
+        // Optimistic UI update not easily possible since we derive from metadata, 
+        // but the Guest will receive it and update their metadata, which will reflect back to us.
+    };
 
     const renderTile = (p: Participant) => {
         // Find track for this participant
@@ -287,6 +391,24 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
             />
         );
     };
+
+    // WAITING ROOM VIEW
+    if (localStatus === 'waiting' && !initialIsHost) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in bg-[#0f1115] text-white h-screen w-screen absolute inset-0 z-[100]">
+                <div className="w-24 h-24 mb-6 rounded-[2rem] bg-gray-800 flex items-center justify-center animate-pulse">
+                    <i className="fas fa-lock text-4xl text-gray-500"></i>
+                </div>
+                <h2 className="text-3xl font-extrabold mb-3">Waiting for Host</h2>
+                <p className="text-gray-400 max-w-md mx-auto">You will be admitted to the meeting shortly. Please stay on this page.</p>
+                <div className="mt-8 flex gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-0"></div>
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-200"></div>
+                </div>
+            </div>
+        );
+    }
 
     // Special handling for screen share tile
     // If someone is sharing, we might want to show their screen as the "Main" tile and their camera as a sidebar tile
@@ -326,6 +448,8 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     }
 
 
+
+    const [toast, setToast] = useState<string | null>(null);
     const [reactions, setReactions] = useState<{ id: string; emoji: string; senderId: string }[]>([]);
 
     const handleReaction = (emoji: string) => {
@@ -352,6 +476,16 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
     // Render Reaction Overlay
     const renderReactions = () => (
         <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+            {toast && (
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md text-white px-6 py-3 rounded-2xl border border-white/10 shadow-2xl animate-in slide-in-from-top-5 fade-in z-[60]">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500">
+                            <i className="fas fa-hand text-sm animate-bounce"></i>
+                        </div>
+                        <span className="text-sm font-bold">{toast}</span>
+                    </div>
+                </div>
+            )}
             {reactions.map(r => (
                 <div
                     key={r.id}
@@ -398,10 +532,20 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 <div className="flex gap-2">
                     <button onClick={() => handleToggleSidebar('participants')} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 relative">
                         <i className="fas fa-users text-sm text-gray-400"></i>
-                        <span className="absolute -bottom-1 -right-1 bg-blue-500 text-[8px] px-1 rounded-full border border-black">{participants.length}</span>
+                        {pendingParticipants.length > 0 && initialIsHost && (
+                            <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-[#0f1115] animate-pulse">
+                                {pendingParticipants.length}
+                            </span>
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-blue-500 text-[8px] px-1 rounded-full border border-black">{visibleParticipants.length}</span>
                     </button>
-                    <button onClick={() => handleToggleSidebar('chat')} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10">
+                    <button onClick={() => handleToggleSidebar('chat')} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 relative">
                         <i className="fas fa-comment text-sm text-gray-400"></i>
+                        {unreadCount > 0 && !isSidebarOpen && (
+                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-[#0f1115]">
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                        )}
                     </button>
                 </div>
             </header>
@@ -416,11 +560,11 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                                     <>
                                         <div className="presentation-main">{mainTile}</div>
                                         <div className="presentation-sidebar">
-                                            {participants.filter(p => p.id !== screenShareParticipant?.id).map(p => renderTile(p))}
+                                            {visibleParticipants.filter(p => p.id !== screenShareParticipant?.id).map(p => renderTile(p))}
                                         </div>
                                     </>
                                 ) : (
-                                    participants.map(p => renderTile(p))
+                                    visibleParticipants.map(p => renderTile(p))
                                 )}
                             </div>
                         </div>
@@ -433,8 +577,8 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     activeTab={sidebarTab}
                     onTabChange={setSidebarTab}
                     messages={messages}
-                    participants={participants}
-                    pendingRequests={[]} // Pending requests not implemented in basic LiveKit flow without backend queue
+                    participants={visibleParticipants} // Show active in main list
+                    pendingRequests={pendingParticipants} // Show waiting in pending list
                     isHost={!!initialIsHost}
                     meetingCode={meetingCode}
                     onClose={() => setIsSidebarOpen(false)}
@@ -442,8 +586,9 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                     onInviteClick={() => setShowInviteModal(true)}
                     onRemoveParticipant={() => { }} // Needs impl
                     onMuteParticipant={() => { }}
-                    onAdmitParticipant={() => { }}
+                    onAdmitParticipant={handleAdmitParticipant}
                     onDenyParticipant={() => { }}
+                    unreadCount={unreadCount}
                 />
             </main>
 
@@ -455,7 +600,7 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 isHandRaised={isHandRaised}
                 isSidebarOpen={isSidebarOpen}
                 isHost={!!initialIsHost}
-                participants={participants}
+                participants={visibleParticipants}
                 onToggleMute={handleToggleMute}
                 onToggleVideo={handleToggleVideo}
                 onToggleScreenShare={handleToggleScreenShare}
@@ -464,6 +609,7 @@ function ActiveMeetingContent({ meetingCode, isHost: initialIsHost }: { meetingC
                 onToggleSidebar={() => handleToggleSidebar('chat')}
                 onEndCall={() => setShowExitConfirm(true)}
                 onAddParticipant={() => { }} // Invite only
+                unreadCount={unreadCount}
             />
 
             {showExitConfirm && <ConfirmationModal title="Leave Meeting" message="Are you sure?" onConfirm={handleEndCall} onCancel={() => setShowExitConfirm(false)} confirmText="Leave" />}

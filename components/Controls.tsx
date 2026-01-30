@@ -33,6 +33,7 @@ interface ControlsProps {
   // Host Control Specific
   meetingPermissions?: MeetingPermissions;
   onUpdatePermissions?: (perms: MeetingPermissions) => void;
+  unreadCount: number;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -40,7 +41,7 @@ const Controls: React.FC<ControlsProps> = ({
   onToggleMute, onToggleVideo, onToggleSidebar,
   onToggleScreenShare, onToggleHandRaised, onEndCall, onAddParticipant, onMuteAll,
   onDisableAllVideo, onRemoveParticipant, onReaction,
-  meetingPermissions, onUpdatePermissions
+  meetingPermissions, onUpdatePermissions, unreadCount
 }) => {
   const [showHostMenu, setShowHostMenu] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -178,13 +179,20 @@ const Controls: React.FC<ControlsProps> = ({
 
         <div className="snap-center shrink-0">
           <Tooltip content="Chat & Participants">
-            <button
-              onClick={onToggleSidebar}
-              aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-              className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-xl border ${isSidebarOpen ? 'bg-blue-600 border-blue-400/50' : 'bg-white/5 hover:bg-white/10 border-white/5'}`}
-            >
-              <i className="fas fa-message text-base text-white"></i>
-            </button>
+            <div className="relative">
+              <button
+                onClick={onToggleSidebar}
+                aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+                className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-xl border ${isSidebarOpen ? 'bg-blue-600 border-blue-400/50' : 'bg-white/5 hover:bg-white/10 border-white/5'}`}
+              >
+                <i className="fas fa-message text-base text-white"></i>
+              </button>
+              {unreadCount > 0 && !isSidebarOpen && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded-full border-2 border-[#1a1c1e] shadow-lg animate-in zoom-in">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
           </Tooltip>
         </div>
 

@@ -9,6 +9,7 @@ export interface Participant {
   isHandRaised?: boolean;
   isSharingScreen?: boolean;
   avatar?: string;
+  status: 'active' | 'waiting';
 }
 
 export interface Message {

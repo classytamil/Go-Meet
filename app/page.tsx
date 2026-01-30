@@ -126,6 +126,7 @@ export default function MeetingPage() {
 
       if (data.token) {
         setToken(data.token);
+        if (data.room) setMeetingCode(data.room);
         setStatus(MeetingStatus.JOINED);
       }
     } catch (e: any) {

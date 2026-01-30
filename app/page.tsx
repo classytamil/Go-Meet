@@ -27,16 +27,16 @@ export default function MeetingPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [meetingDuration, setMeetingDuration] = useState(0);
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
-  const [speakerVolume, setSpeakerVolume] = useState(0); 
+  const [speakerVolume, setSpeakerVolume] = useState(0);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [participantToKick, setParticipantToKick] = useState<Participant | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
-  const [reactions, setReactions] = useState<{id: number, emoji: string, left: string}[]>([]);
+  const [reactions, setReactions] = useState<{ id: number, emoji: string, left: string }[]>([]);
   const [networkQuality, setNetworkQuality] = useState<'excellent' | 'fair' | 'poor' | 'offline'>('excellent');
-  
+
   // Meeting Permissions (Host controlled)
   const [meetingPermissions, setMeetingPermissions] = useState({
     isLocked: false,
@@ -65,14 +65,14 @@ export default function MeetingPage() {
         else if (rtt > 150 || downlink < 5) setNetworkQuality('fair');
         else setNetworkQuality('excellent');
       } else {
-        setNetworkQuality('excellent'); 
+        setNetworkQuality('excellent'); // Fallback
       }
     };
 
     updateNetworkStatus();
     window.addEventListener('online', updateNetworkStatus);
     window.addEventListener('offline', updateNetworkStatus);
-    
+
     const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
     if (conn) {
       conn.addEventListener('change', updateNetworkStatus);
@@ -104,14 +104,7 @@ export default function MeetingPage() {
     setReactions(prev => [...prev, newReaction]);
   };
 
-  useEffect(() => {
-    if (status === MeetingStatus.WAITING_ROOM) {
-      const timer = setTimeout(() => {
-        setStatus(MeetingStatus.JOINED);
-      }, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
+
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -131,9 +124,14 @@ export default function MeetingPage() {
   useEffect(() => {
     return () => {
       if (localStream) localStream.getTracks().forEach(t => t.stop());
+    };
+  }, [localStream]);
+
+  useEffect(() => {
+    return () => {
       if (screenStream) screenStream.getTracks().forEach(t => t.stop());
     };
-  }, [localStream, screenStream]);
+  }, [screenStream]);
 
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -175,13 +173,13 @@ export default function MeetingPage() {
         analyserRef.current.getByteFrequencyData(dataArray);
         const sum = dataArray.reduce((a, b) => a + b, 0);
         const average = sum / dataArray.length;
-        
-        if (average > 10) { 
-           if (activeSpeakerId === 'me' || average > 40) {
-              const normalized = Math.min(average / 120, 1);
-              setSpeakerVolume(normalized);
-           }
-          if (average > 30) { 
+
+        if (average > 10) {
+          if (activeSpeakerId === 'me' || average > 40) {
+            const normalized = Math.min(average / 120, 1);
+            setSpeakerVolume(normalized);
+          }
+          if (average > 30) {
             setActiveSpeakerId('me');
             if (speakerTimeoutRef.current) clearTimeout(speakerTimeoutRef.current);
             speakerTimeoutRef.current = window.setTimeout(() => {
@@ -189,7 +187,7 @@ export default function MeetingPage() {
             }, 2500);
           }
         } else if (activeSpeakerId === 'me') {
-           setSpeakerVolume(0);
+          setSpeakerVolume(0);
         }
         requestAnimationFrame(checkAudio);
       };
@@ -200,9 +198,9 @@ export default function MeetingPage() {
   const initMedia = async (isHost: boolean = false) => {
     setMediaError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } }, 
-        audio: { echoCancellation: true, noiseSuppression: true } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: { echoCancellation: true, noiseSuppression: true }
       });
       setLocalStream(stream);
       setParticipants([{
@@ -217,9 +215,9 @@ export default function MeetingPage() {
   };
 
   const handleCreateMeeting = () => {
-    const code = Math.random().toString(36).substring(2, 5) + '-' + 
-                 Math.random().toString(36).substring(2, 6) + '-' + 
-                 Math.random().toString(36).substring(2, 5);
+    const code = Math.random().toString(36).substring(2, 5) + '-' +
+      Math.random().toString(36).substring(2, 6) + '-' +
+      Math.random().toString(36).substring(2, 5);
     setMeetingCode(code);
     setStatus(MeetingStatus.LOBBY);
     initMedia(true);
@@ -277,7 +275,7 @@ export default function MeetingPage() {
   };
 
   const handleDenyParticipant = (id: string) => setPendingRequests(prev => prev.filter(x => x.id !== id));
-  
+
   const handleRemoveParticipantById = (id: string) => {
     const p = participants.find(x => x.id === id);
     if (p) setParticipantToKick(p);
@@ -309,20 +307,20 @@ export default function MeetingPage() {
         } catch (e) {
           stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         }
-        
+
         const hasSystemAudio = stream.getAudioTracks().length > 0;
         setScreenStream(stream);
-        
+
         stream.getVideoTracks()[0].onended = () => {
           setScreenStream(null);
           setParticipants(prev => prev.filter(p => p.id !== 'screen-share').map(p => p.isMe ? { ...p, isSharingScreen: false } : p));
         };
 
         setParticipants(prev => [
-          { id: 'screen-share', name: 'Your Screen', isMe: true, isAI: false, videoEnabled: true, audioEnabled: hasSystemAudio, isSharingScreen: true }, 
+          { id: 'screen-share', name: 'Your Screen', isMe: true, isAI: false, videoEnabled: true, audioEnabled: hasSystemAudio, isSharingScreen: true },
           ...prev.map(p => p.isMe ? { ...p, isSharingScreen: true } : p)
         ]);
-      } catch (err: any) { 
+      } catch (err: any) {
         console.error("Screen share error:", err);
         if (err.name === 'NotAllowedError') {
           setMediaError("Screen share request was denied.");
@@ -337,7 +335,7 @@ export default function MeetingPage() {
     const randomName = names[Math.floor(Math.random() * names.length)];
     const id = `p-${Date.now()}`;
     const newP: Participant = { id, name: randomName, isMe: false, isAI: false, videoEnabled: Math.random() > 0.3, audioEnabled: true, isHandRaised: false };
-    
+
     if (isLocalHost) {
       setPendingRequests(prev => [...prev, newP]);
       setIsSidebarOpen(true);
@@ -349,7 +347,7 @@ export default function MeetingPage() {
 
   const handleSimulate100 = () => {
     const newParticipants: Participant[] = [];
-    for(let i=0; i<99; i++) {
+    for (let i = 0; i < 99; i++) {
       newParticipants.push({
         id: `sim-${i}`,
         name: `Guest ${i + 1}`,
@@ -407,17 +405,17 @@ export default function MeetingPage() {
   });
 
   const renderVideoTile = (p: Participant) => (
-    <VideoTile 
-      key={p.id} participant={p} isActiveSpeaker={activeSpeakerId === p.id} 
+    <VideoTile
+      key={p.id} participant={p} isActiveSpeaker={activeSpeakerId === p.id}
       isLocalHost={isLocalHost} volume={activeSpeakerId === p.id ? speakerVolume : 0}
-      stream={p.id === 'me' ? localStream : (p.id === 'screen-share' ? screenStream : null)} 
+      stream={p.id === 'me' ? localStream : (p.id === 'screen-share' ? screenStream : null)}
       onMuteParticipant={handleMuteParticipant} onRemoveParticipant={handleRemoveParticipantById}
       onToggleLocalMute={handleToggleMute} onToggleLocalVideo={handleToggleVideo}
     />
   );
 
   const getNetworkColor = () => {
-    switch(networkQuality) {
+    switch (networkQuality) {
       case 'excellent': return 'bg-green-500 shadow-green-500/50';
       case 'fair': return 'bg-yellow-500 shadow-yellow-500/50';
       case 'poor': return 'bg-red-500 shadow-red-500/50';
@@ -439,7 +437,7 @@ export default function MeetingPage() {
           <div className="space-y-8 text-center lg:text-left">
             <h1 className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight">Large-scale meetings. <span className="text-blue-500">Engaging</span> for everyone.</h1>
             <p className="text-gray-400 text-lg md:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0">Host up to 100 participants with crystal clear video, live reactions, and AI summaries.</p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <button onClick={handleCreateMeeting} className="bg-blue-600 hover:bg-blue-500 px-8 py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-900/30 active:scale-95">
                 <i className="fas fa-video"></i> New Meeting
@@ -451,25 +449,25 @@ export default function MeetingPage() {
             </div>
           </div>
           <div className="relative group perspective-1000">
-             <div className="absolute inset-0 bg-blue-600/10 blur-[100px] rounded-full"></div>
-             <div className="relative glass-panel rounded-[3rem] p-10 border border-white/10 shadow-2xl transition-transform duration-700 group-hover:scale-[1.02]">
-                <div className="grid grid-cols-3 gap-3">
-                  {[...Array(9)].map((_, i) => (
-                    <div key={i} className={`aspect-video rounded-xl ${i === 4 ? 'bg-blue-600 scale-110 shadow-xl shadow-blue-500/20' : 'bg-gray-800/50'} border border-white/5`}></div>
-                  ))}
-                </div>
-                <div className="mt-8 space-y-4">
-                  <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden"><div className="h-full w-2/3 bg-blue-500 rounded-full"></div></div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex gap-2">
-                      <div className="h-8 w-8 rounded-lg bg-white/5"></div>
-                      <div className="h-8 w-8 rounded-lg bg-white/5"></div>
-                      <div className="h-8 w-8 rounded-lg bg-white/5"></div>
-                    </div>
-                    <div className="h-10 w-24 bg-red-500/20 rounded-xl"></div>
+            <div className="absolute inset-0 bg-blue-600/10 blur-[100px] rounded-full"></div>
+            <div className="relative glass-panel rounded-[3rem] p-10 border border-white/10 shadow-2xl transition-transform duration-700 group-hover:scale-[1.02]">
+              <div className="grid grid-cols-3 gap-3">
+                {[...Array(9)].map((_, i) => (
+                  <div key={i} className={`aspect-video rounded-xl ${i === 4 ? 'bg-blue-600 scale-110 shadow-xl shadow-blue-500/20' : 'bg-gray-800/50'} border border-white/5`}></div>
+                ))}
+              </div>
+              <div className="mt-8 space-y-4">
+                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden"><div className="h-full w-2/3 bg-blue-500 rounded-full"></div></div>
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-white/5"></div>
+                    <div className="h-8 w-8 rounded-lg bg-white/5"></div>
+                    <div className="h-8 w-8 rounded-lg bg-white/5"></div>
                   </div>
+                  <div className="h-10 w-24 bg-red-500/20 rounded-xl"></div>
                 </div>
-             </div>
+              </div>
+            </div>
           </div>
         </main>
       </div>
@@ -490,11 +488,51 @@ export default function MeetingPage() {
           <div className="w-full md:w-80 space-y-8 text-center md:text-left">
             <h1 className="text-4xl font-extrabold tracking-tight">Check your setup</h1>
             <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-1">
-               <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Meeting ID</span>
-               <p className="text-xl font-mono text-gray-200 tracking-wider truncate">{meetingCode}</p>
+              <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black">Meeting ID</span>
+              <p className="text-xl font-mono text-gray-200 tracking-wider truncate">{meetingCode}</p>
             </div>
             <button onClick={handleJoinNow} className="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-bold text-lg shadow-2xl shadow-blue-900/30 transition-all active:scale-95">Join Now</button>
             <button onClick={() => setStatus(MeetingStatus.HOME)} className="w-full text-gray-500 font-bold hover:text-white transition-colors text-sm uppercase tracking-widest">Exit</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === MeetingStatus.WAITING_ROOM) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f1115] p-6 text-white relative overflow-hidden">
+        {/* Ambient Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-[#0f1115] to-[#0f1115] animate-spin-slow opacity-50"></div>
+        </div>
+
+        <div className="max-w-md w-full relative z-10 p-8 rounded-[2.5rem] bg-[#1a1c1e]/80 backdrop-blur-xl border border-white/10 text-center shadow-2xl space-y-6">
+          <div className="w-20 h-20 mx-auto bg-amber-500/10 rounded-full flex items-center justify-center animate-pulse">
+            <i className="fas fa-hourglass-half text-3xl text-amber-500"></i>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight">Waiting for host...</h2>
+            <p className="text-gray-400">The meeting host will let you in soon.</p>
+          </div>
+
+          <div className="py-6 border-y border-white/5 space-y-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 font-medium">Meeting ID</span>
+              <span className="font-mono text-gray-300 bg-white/5 px-2 py-1 rounded-lg">{meetingCode}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 font-medium">Status</span>
+              <span className="text-amber-500 font-bold flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></div> Pending</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button onClick={() => setStatus(MeetingStatus.JOINED)} className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-sm font-bold text-gray-300 transition-all border border-white/5 flex items-center justify-center gap-2 group">
+              <i className="fas fa-magic text-blue-400 group-hover:rotate-12 transition-transform"></i> Demo: Simulate "Admit"
+            </button>
+            <button onClick={() => setStatus(MeetingStatus.HOME)} className="w-full text-red-400 hover:text-red-300 text-xs font-bold uppercase tracking-widest py-2">Leave</button>
           </div>
         </div>
       </div>
@@ -531,16 +569,16 @@ export default function MeetingPage() {
             <div className="h-4 w-[1px] bg-gray-800"></div>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full border cursor-pointer transition-all ${meetingPermissions.isLocked ? 'bg-amber-500/10 border-amber-500/20' : 'bg-green-500/10 border-green-500/20'}`} onClick={() => setShowSecurityModal(true)}>
-             <i className={`fas ${meetingPermissions.isLocked ? 'fa-lock text-amber-500' : 'fa-shield-check text-green-400'} text-[10px]`}></i>
-             <span className={`text-[10px] font-black uppercase tracking-widest hidden xs:inline ${meetingPermissions.isLocked ? 'text-amber-500' : 'text-green-400'}`}>
-               {meetingPermissions.isLocked ? 'Meeting Locked' : 'E2EE Secured'}
-             </span>
+            <i className={`fas ${meetingPermissions.isLocked ? 'fa-lock text-amber-500' : 'fa-shield-check text-green-400'} text-[10px]`}></i>
+            <span className={`text-[10px] font-black uppercase tracking-widest hidden xs:inline ${meetingPermissions.isLocked ? 'text-amber-500' : 'text-green-400'}`}>
+              {meetingPermissions.isLocked ? 'Meeting Locked' : 'E2EE Secured'}
+            </span>
           </div>
           {isLocalHost && participants.length < 10 && (
             <button onClick={handleSimulate100} className="text-[9px] font-black bg-white/5 border border-white/10 rounded-full px-3 py-1 hover:bg-white/10 transition-colors uppercase tracking-tighter">Demo: Fill 100</button>
           )}
         </div>
-        
+
         <div className="flex items-center gap-3">
           <div className="px-4 py-1.5 bg-red-500/10 rounded-full border border-red-500/20 flex items-center gap-2">
             <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></span>
@@ -549,34 +587,39 @@ export default function MeetingPage() {
         </div>
 
         <div className="flex gap-2">
-           <button onClick={() => handleToggleSidebar('participants')} className="w-10 h-10 rounded-xl flex items-center justify-center relative bg-white/5 text-gray-400 hover:bg-white/10 active:scale-90 transition-all">
-             <i className="fas fa-users text-sm"></i>
-             <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-[8px] min-w-4 h-4 px-1 flex items-center justify-center rounded-full border-2 border-[#0f1115] font-black">{participants.length}</span>
-           </button>
-           <button onClick={() => handleToggleSidebar('chat')} className={`w-10 h-10 rounded-xl flex items-center justify-center active:scale-90 transition-all ${isSidebarOpen && sidebarTab === 'chat' ? 'bg-blue-600' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
-             <i className="fas fa-comment text-sm"></i>
-           </button>
+          <button onClick={() => handleToggleSidebar('participants')} className="w-10 h-10 rounded-xl flex items-center justify-center relative bg-white/5 text-gray-400 hover:bg-white/10 active:scale-90 transition-all">
+            <i className="fas fa-users text-sm"></i>
+            {pendingRequests.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-[8px] min-w-4 h-4 px-1 flex items-center justify-center rounded-full border-2 border-[#0f1115] font-black z-10 animate-pulse">
+                {pendingRequests.length}
+              </span>
+            )}
+            <span className="absolute -bottom-1.5 -right-1.5 bg-blue-500 text-[8px] min-w-4 h-4 px-1 flex items-center justify-center rounded-full border-2 border-[#0f1115] font-black">{participants.length}</span>
+          </button>
+          <button onClick={() => handleToggleSidebar('chat')} className={`w-10 h-10 rounded-xl flex items-center justify-center active:scale-90 transition-all ${isSidebarOpen && sidebarTab === 'chat' ? 'bg-blue-600' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+            <i className="fas fa-comment text-sm"></i>
+          </button>
         </div>
       </header>
 
       <main className="flex-1 relative flex overflow-hidden">
-        <div className={`flex-1 transition-all duration-500 ease-in-out ${isSidebarOpen ? 'lg:mr-[400px]' : ''}`}>
-          <div className="h-full overflow-hidden relative">
-             <div className="h-full w-full flex items-center justify-center">
-               <div key={participants.length} className={`video-grid ${getGridClass()} animate-in fade-in duration-500`}>
+        <div className={`flex-1 min-h-0 transition-all duration-500 ease-in-out ${isSidebarOpen ? 'lg:mr-[400px]' : ''}`}>
+          <div className="absolute inset-0 overflow-y-auto custom-scrollbar px-2 py-4 pb-32">
+            <div className="min-h-full w-full flex items-start justify-center">
+              <div key={participants.length} className={`video-grid ${getGridClass()} animate-in fade-in duration-500`}>
                 {isPresentation ? (
                   <>
                     <div className="presentation-main">{renderVideoTile(visibleParticipants.find(p => p.id === 'screen-share')!)}</div>
                     <div className="presentation-sidebar">{visibleParticipants.filter(p => p.id !== 'screen-share').slice(0, 16).map(p => renderVideoTile(p))}</div>
                   </>
                 ) : (
-                  visibleParticipants.slice(0, 100).map(p => renderVideoTile(p))
+                  visibleParticipants.map(p => renderVideoTile(p))
                 )}
-               </div>
-             </div>
+              </div>
+            </div>
           </div>
         </div>
-        <Sidebar 
+        <Sidebar
           isOpen={isSidebarOpen} activeTab={sidebarTab} onTabChange={setSidebarTab}
           messages={messages} participants={participants} pendingRequests={pendingRequests} isHost={isLocalHost}
           meetingCode={meetingCode}
@@ -586,11 +629,11 @@ export default function MeetingPage() {
         />
       </main>
 
-      <Controls 
+      <Controls
         isMuted={isMuted} isVideoOff={isVideoOff} isSidebarOpen={isSidebarOpen} isHandRaised={isHandRaised}
         isScreenSharing={!!screenStream} isHost={isLocalHost} participants={participants}
-        onToggleMute={handleToggleMute} onToggleVideo={handleToggleVideo} 
-        onToggleSidebar={() => handleToggleSidebar('chat')} onToggleScreenShare={handleToggleScreenShare} 
+        onToggleMute={handleToggleMute} onToggleVideo={handleToggleVideo}
+        onToggleSidebar={() => handleToggleSidebar('chat')} onToggleScreenShare={handleToggleScreenShare}
         onToggleHandRaised={handleToggleHandRaised}
         onEndCall={() => setShowExitConfirm(true)} onAddParticipant={handleAddParticipant}
         onMuteAll={handleMuteAll} onDisableAllVideo={handleDisableAllVideo}

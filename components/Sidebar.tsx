@@ -38,18 +38,17 @@ const ChatMessage: React.FC<{ msg: Message; secret: string }> = ({ msg, secret }
           {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
-      <div className={`p-3 rounded-2xl max-w-[95%] text-sm leading-relaxed border ${
-        msg.sender === 'You' 
-          ? 'bg-blue-600/10 border-blue-500/20 text-blue-50 rounded-tl-none' 
+      <div className={`p-3 rounded-2xl max-w-[95%] text-sm leading-relaxed border ${msg.sender === 'You'
+          ? 'bg-blue-600/10 border-blue-500/20 text-blue-50 rounded-tl-none'
           : 'bg-white/5 border-white/5 text-gray-200 rounded-tl-none'
-      }`}>
+        }`}>
         {decrypted}
       </div>
     </div>
   );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ 
+const Sidebar: React.FC<SidebarProps> = ({
   messages, participants, pendingRequests = [], isOpen, isHost, activeTab, meetingCode,
   onTabChange, onClose, onSendMessage, onInviteClick, onRemoveParticipant, onMuteParticipant, onAdmitParticipant, onDenyParticipant
 }) => {
@@ -69,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (messages.length === 0) return;
     setIsSummarizing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
       const decryptedMessages = await Promise.all(
         messages.map(async m => {
           const text = await decryptData(m.text, meetingCode);
@@ -114,8 +113,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[#1a1c1e] border-l border-gray-800 z-[100] flex flex-col shadow-2xl transition-all animate-in slide-in-from-right duration-500">
       <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-[#1a1c1e]/80 backdrop-blur-md">
         <h2 className="font-black text-xs uppercase tracking-widest flex items-center gap-3 text-gray-100">
-           <div className="w-8 h-8 rounded-lg bg-blue-600/10 flex items-center justify-center"><i className="fas fa-users text-blue-400"></i></div>
-           Meeting Hub
+          <div className="w-8 h-8 rounded-lg bg-blue-600/10 flex items-center justify-center"><i className="fas fa-users text-blue-400"></i></div>
+          Meeting Hub
         </h2>
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center hover:bg-white/5 rounded-xl transition-all text-gray-500"><i className="fas fa-times"></i></button>
       </div>
@@ -159,16 +158,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
             <div className="p-4 border-b border-gray-800">
-               <div className="relative">
-                  <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 text-xs"></i>
-                  <input 
-                    type="text" 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search 100 participants..." 
-                    className="w-full bg-white/5 border border-gray-800 rounded-xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-blue-500 transition-all"
-                  />
-               </div>
+              <div className="relative">
+                <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 text-xs"></i>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search 100 participants..."
+                  className="w-full bg-white/5 border border-gray-800 rounded-xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-blue-500 transition-all"
+                />
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar">
@@ -212,7 +211,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         {p.isHost && <span className="text-[8px] text-amber-500 font-black uppercase tracking-tighter">Meeting Host</span>}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 opacity-40 group-hover/p:opacity-100 transition-opacity">
                       {p.isHandRaised && <i className="fas fa-hand text-amber-500 text-[10px] animate-bounce"></i>}
                       {isHost && !p.isMe && (

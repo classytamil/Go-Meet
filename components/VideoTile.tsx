@@ -15,7 +15,7 @@ interface VideoTileProps {
   onToggleLocalVideo?: () => void;
 }
 
-const VideoTile: React.FC<VideoTileProps> = ({ 
+const VideoTile: React.FC<VideoTileProps> = ({
   participant, stream, isActiveSpeaker, isLocalHost, volume = 0,
   onMuteParticipant, onRemoveParticipant, onToggleLocalMute, onToggleLocalVideo
 }) => {
@@ -58,47 +58,55 @@ const VideoTile: React.FC<VideoTileProps> = ({
   const isSharingScreen = participant.isSharingScreen || isScreenShare;
 
   return (
-    <div 
+    <div
       className={`group video-tile-container transition-all duration-300 ease-out ${isActiveSpeaker ? 'z-10' : 'z-0'}`}
       style={{ transform: `scale(${scaleEffect})` }}
     >
-      <div 
-        className={`relative rounded-xl md:rounded-2xl overflow-hidden bg-[#1a1c1e] border-2 transition-all duration-300 w-full h-full shadow-lg flex items-center justify-center ${
-          hasStartedSpeaking ? 'animate-speaker-pop' : ''
-        } ${
-          isPinned ? 'ring-4 ring-blue-500/50' : ''
-        } ${
-          isSharingScreen 
-            ? 'border-cyan-500 shadow-[0_0_20px_rgba(34,211,238,0.2)]' 
-            : isActiveSpeaker 
-              ? 'border-blue-500' 
+      <div
+        className={`relative rounded-xl md:rounded-2xl overflow-hidden bg-[#1a1c1e] border-2 transition-all duration-300 w-full h-full shadow-lg flex items-center justify-center ${hasStartedSpeaking ? 'animate-speaker-pop' : ''
+          } ${isPinned ? 'ring-4 ring-blue-500/50' : ''
+          } ${isSharingScreen
+            ? 'border-cyan-500 shadow-[0_0_20px_rgba(34,211,238,0.2)]'
+            : isActiveSpeaker
+              ? 'border-blue-500'
               : 'border-gray-800/50 hover:border-white/10'
-        }`}
+          }`}
       >
-        
+
         {/* Status Indicators Overlay (Top Left) */}
         <div className="absolute top-2 left-2 z-30 flex flex-col gap-1.5 pointer-events-none">
-           {participant.isSharingScreen && !isScreenShare && (
-              <div className="bg-cyan-500 text-white w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-900/40 border border-cyan-400/50 animate-in fade-in zoom-in" aria-label="Sharing screen">
-                <i className="fas fa-desktop text-[10px]" aria-hidden="true"></i>
-              </div>
-           )}
-           {participant.isHandRaised && !isScreenShare && (
-              <div className="bg-amber-500 text-white w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shadow-lg shadow-amber-900/40 border border-amber-400/50 animate-bounce" aria-label="Hand raised">
-                <i className="fas fa-hand text-[10px]" aria-hidden="true"></i>
-              </div>
-           )}
-           {!participant.audioEnabled && !isScreenShare && (
-              <div className="bg-red-500/80 backdrop-blur-md text-white w-6 h-6 rounded-lg flex items-center justify-center shadow-lg border border-red-400/30" aria-label="Microphone muted">
-                <i className="fas fa-microphone-slash text-[8px]" aria-hidden="true"></i>
-              </div>
-           )}
+          {participant.isSharingScreen && !isScreenShare && (
+            <div className="bg-cyan-600 text-white px-2 h-7 md:h-8 rounded-lg flex items-center gap-2 shadow-lg shadow-cyan-900/40 border border-cyan-400/50 animate-in fade-in zoom-in">
+              <i className="fas fa-desktop text-[10px]" aria-hidden="true"></i>
+              <span className="text-[9px] font-bold uppercase tracking-wider hidden sm:inline">Presenting</span>
+            </div>
+          )}
+          {participant.isHandRaised && !isScreenShare && (
+            <div className="bg-amber-500 text-white w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shadow-lg shadow-amber-900/40 border border-amber-400/50 animate-bounce" aria-label="Hand raised">
+              <i className="fas fa-hand text-[10px]" aria-hidden="true"></i>
+            </div>
+          )}
+          {!participant.audioEnabled && !isScreenShare && (
+            <div className="bg-red-500/80 backdrop-blur-md text-white w-6 h-6 rounded-lg flex items-center justify-center shadow-lg border border-red-400/30" aria-label="Microphone muted">
+              <i className="fas fa-microphone-slash text-[8px]" aria-hidden="true"></i>
+            </div>
+          )}
         </div>
 
-        {/* Quick Action Overlay (Visible on Hover/Focus - Top Right) */}
+        {/* Screen Share Badge (Top Right - Always Visible) */}
+        {participant.isSharingScreen && !isScreenShare && (
+          <div className="absolute top-2 right-2 z-30 pointer-events-none">
+            <div className="bg-cyan-600/90 backdrop-blur-md text-white px-2 py-1 rounded-lg border border-cyan-400/30 shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
+              <span className="text-[8px] font-black uppercase tracking-widest">Presenting</span>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Action Overlay (Visible on Hover/Focus - Top Right - shifted down if badge exists) */}
         {!isScreenShare && (
-          <div className="absolute top-2 right-2 z-40 flex flex-col gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-            <button 
+          <div className={`absolute right-2 z-40 flex flex-col gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity ${participant.isSharingScreen ? 'top-10' : 'top-2'}`}>
+            <button
               onClick={() => setIsPinned(!isPinned)}
               aria-label={isPinned ? `Unpin ${participant.name}` : `Pin ${participant.name}`}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-xl backdrop-blur-md border ${isPinned ? 'bg-blue-600 border-blue-400/50 text-white' : 'bg-black/60 border-white/10 text-gray-300 hover:text-white hover:bg-black/80'}`}
@@ -107,7 +115,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
             </button>
 
             {(participant.isMe || isLocalHost) && (
-              <button 
+              <button
                 onClick={handleToggleMute}
                 aria-label={participant.audioEnabled ? `Mute ${participant.isMe ? 'yourself' : participant.name}` : `Unmute ${participant.isMe ? 'yourself' : participant.name}`}
                 className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-xl backdrop-blur-md border ${!participant.audioEnabled ? 'bg-red-500 border-red-400/50 text-white' : 'bg-black/60 border-white/10 text-gray-300 hover:text-white hover:bg-black/80'}`}
@@ -117,7 +125,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
             )}
 
             {isLocalHost && !participant.isMe && (
-              <button 
+              <button
                 onClick={handleRemove}
                 aria-label={`Remove ${participant.name} from meeting`}
                 className="w-8 h-8 rounded-lg bg-red-600/80 hover:bg-red-600 text-white flex items-center justify-center transition-all shadow-xl backdrop-blur-md border border-red-400/30"
@@ -131,12 +139,12 @@ const VideoTile: React.FC<VideoTileProps> = ({
         {/* Video or Avatar */}
         <div className="w-full h-full relative z-10 flex items-center justify-center overflow-hidden">
           {participant.videoEnabled && (stream || isScreenShare) ? (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted={participant.isMe} 
-              className={`w-full h-full object-cover ${participant.isMe && !isScreenShare ? 'mirror' : ''}`} 
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted={participant.isMe}
+              className={`w-full h-full object-cover ${participant.isMe && !isScreenShare ? 'mirror' : ''}`}
               aria-label={`${participant.name}'s video stream`}
             />
           ) : (
@@ -154,10 +162,10 @@ const VideoTile: React.FC<VideoTileProps> = ({
             {isActiveSpeaker && !isScreenShare && (
               <div className="flex gap-0.5 items-end h-2 w-3 shrink-0" aria-hidden="true">
                 {[1, 2, 3].map(i => (
-                  <div 
-                    key={i} 
-                    className="w-0.5 bg-blue-500 rounded-full" 
-                    style={{ height: `${30 + Math.random() * 70}%` }} 
+                  <div
+                    key={i}
+                    className="w-0.5 bg-blue-500 rounded-full"
+                    style={{ height: `${30 + Math.random() * 70}%` }}
                   />
                 ))}
               </div>
